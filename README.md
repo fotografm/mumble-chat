@@ -140,12 +140,6 @@ sudo systemctl restart yggdrasil
 
 ---
 
-## Finding Mumble servers on Yggdrasil
-
-Ask in your community or mesh network group for a Mumble server address. If you are running your own Mumble server, share your Yggdrasil address (`yggdrasilctl getself`) and the Mumble port (default `64738`).
-
----
-
 ## Project layout
 
 ```
