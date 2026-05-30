@@ -26,10 +26,12 @@ It is designed to work over **Yggdrasil**, an encrypted peer-to-peer IPv6 networ
 
 ## Installation
 
-### 1. Clone the repository
+### 1. Download the files
+
+No GitHub account is needed. Run this command to download everything:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mumble-chat.git
+git clone https://github.com/fotografm/mumble-chat.git
 cd mumble-chat
 ```
 
