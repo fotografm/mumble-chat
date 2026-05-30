@@ -106,6 +106,76 @@ A login dialog will appear. Enter your Mumble server's address, port, your name,
 
 ---
 
+## NixOS
+
+The standard setup script uses `apt-get` which does not exist on NixOS.
+Follow these steps instead.
+
+### Yggdrasil on NixOS
+
+Yggdrasil is a system service on NixOS. Add it to your `configuration.nix`:
+
+```nix
+services.yggdrasil = {
+  enable = true;
+  settings = {
+    Peers = [
+      "tls://your-chosen-peer:port"
+    ];
+  };
+};
+```
+
+Find peer addresses at **https://publicpeers.neilalexander.dev**, then rebuild:
+
+```bash
+sudo nixos-rebuild switch
+```
+
+Check your Yggdrasil address once the service is running:
+
+```bash
+sudo yggdrasilctl getself
+```
+
+### Python dependencies
+
+Even though Mumble Chat disables audio, the `pymumble` library imports `opuslib`
+at startup, and `opuslib` looks for `libopus.so` using the system library path.
+On NixOS, `libopus` lives in the Nix store and is invisible to the standard
+library search — this causes a crash on launch.
+
+The fix is to enter a Nix shell that makes `libopus` and `tkinter` available
+before setting up or running the app. A `shell.nix` is included in this
+repository for exactly this purpose.
+
+### Installing and running on NixOS
+
+**First time only — set up the Python environment:**
+
+```bash
+git clone https://github.com/fotografm/mumble-chat.git
+cd mumble-chat
+nix-shell --run "bash setup_mumble_chat.sh"
+```
+
+The script will skip the Yggdrasil and `apt-get` steps automatically (since
+those are not relevant on NixOS) and will create the Python virtual environment
+with all required packages.
+
+**Every time you want to run Mumble Chat:**
+
+```bash
+cd mumble-chat
+nix-shell --run "bash run_mumble_chat.sh"
+```
+
+You must always launch via `nix-shell` so that `libopus` and `tkinter` are
+visible to the application. Launching `run_mumble_chat.sh` directly without
+`nix-shell` will fail with a library error.
+
+---
+
 ## Running with command-line arguments
 
 You can skip the login dialog by passing arguments directly:
@@ -197,8 +267,9 @@ sudo systemctl restart yggdrasil
 ```
 mumble-chat/
 ├── mumble_chat.py        Main application
-├── setup_mumble_chat.sh  One-time installer
+├── setup_mumble_chat.sh  One-time installer (Debian/Ubuntu/Mint)
 ├── run_mumble_chat.sh    Launch script
+├── shell.nix             Nix shell for NixOS users
 ├── venv/                 Python environment (local, not committed to git)
 └── README.md
 ```
