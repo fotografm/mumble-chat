@@ -368,6 +368,14 @@ class ConnectDialog:
         self.top.resizable(False, False)
         self.top.grab_set()
 
+        # Centre on screen after widgets are laid out
+        self.top.update_idletasks()
+        sw = self.top.winfo_screenwidth()
+        sh = self.top.winfo_screenheight()
+        w  = self.top.winfo_reqwidth()
+        h  = self.top.winfo_reqheight()
+        self.top.geometry("+%d+%d" % ((sw - w) // 2, (sh - h) // 2))
+
         pad = {"padx": 14, "pady": 5}
 
         def row(label, default="", show=None):
@@ -427,6 +435,7 @@ def main():
     args = parser.parse_args()
 
     root = tk.Tk()
+    root.withdraw()          # hide blank window while the login dialog is open
     root.configure(bg=BG)
 
     host     = args.host
@@ -443,6 +452,14 @@ def main():
         host, port, username, password, channel = dialog.result
 
     app = MumbleChatApp(root, host, port, username, password, channel)
+
+    # Show the chat window and bring it to the front
+    root.deiconify()
+    root.lift()
+    root.attributes("-topmost", True)
+    root.after(200, lambda: root.attributes("-topmost", False))
+    root.focus_force()
+
     root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.mainloop()
 
