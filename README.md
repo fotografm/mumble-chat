@@ -28,7 +28,19 @@ It is designed to work over **Yggdrasil**, an encrypted peer-to-peer IPv6 networ
 
 ### 1. Download the files
 
-No GitHub account is needed. Run this command to download everything:
+No GitHub account is needed. First check that `git` is installed:
+
+```bash
+git --version
+```
+
+If you see `command not found`, install it first:
+
+```bash
+sudo apt install git
+```
+
+Then download Mumble Chat:
 
 ```bash
 git clone https://github.com/fotografm/mumble-chat.git
