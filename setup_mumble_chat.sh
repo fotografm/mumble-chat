@@ -96,6 +96,7 @@ else
                 echo "      sudo nano /etc/yggdrasil/yggdrasil.conf"
                 echo ""
                 echo "     Find peers at:"
+                echo "       https://publicpeers.neilalexander.dev"
                 echo "       https://github.com/yggdrasil-network/public-peers"
                 echo ""
                 echo "     Then restart Yggdrasil:"

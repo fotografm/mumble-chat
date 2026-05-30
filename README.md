@@ -46,7 +46,43 @@ The script will:
 
 You will be asked for your password (`sudo`) only if packages need to be installed.
 
-### 3. Launch
+### 3. Add a Yggdrasil peer
+
+> **This step is required before Mumble Chat can connect to anything over Yggdrasil.**  
+> Yggdrasil needs at least one public peer to route traffic through. Without one, your node is isolated.
+
+Find a peer close to you at **https://publicpeers.neilalexander.dev** (or the community list at https://github.com/yggdrasil-network/public-peers). Copy one or more peer URIs — they look like `tls://hostname:port` or `tcp://hostname:port`.
+
+Open the Yggdrasil config file:
+
+```bash
+sudo nano /etc/yggdrasil/yggdrasil.conf
+```
+
+Find the `Peers:` section and add your chosen peer(s):
+
+```
+Peers:
+[
+  tls://example-peer.net:12345
+]
+```
+
+Save the file, then restart Yggdrasil:
+
+```bash
+sudo systemctl restart yggdrasil
+```
+
+Confirm you are connected:
+
+```bash
+yggdrasilctl getPeers
+```
+
+You should see at least one peer listed with a non-zero `uptime`.
+
+### 4. Launch
 
 ```bash
 bash run_mumble_chat.sh
@@ -128,9 +164,11 @@ After installation, Yggdrasil needs at least one **peer** to route traffic throu
 sudo nano /etc/yggdrasil/yggdrasil.conf
 ```
 
-Find the `Peers:` section and add one or more public peer addresses. A community-maintained list of peers is available at:
+Find the `Peers:` section and add one or more public peer addresses. The best place to find peers is:
 
-**https://github.com/yggdrasil-network/public-peers**
+**https://publicpeers.neilalexander.dev**
+
+A community-maintained backup list is also available at https://github.com/yggdrasil-network/public-peers
 
 After saving, restart Yggdrasil:
 
