@@ -10,6 +10,7 @@ Install:
 import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import threading
+import time
 import re
 import sys
 import argparse
@@ -200,6 +201,12 @@ class MumbleChatApp:
             self.msg_queue.put(("status", "disconnected"))
 
     def _post_connect(self):
+        # Wait for server channel sync before marking as ready (up to 3s)
+        for _ in range(30):
+            if self.mumble.my_channel() is not None:
+                break
+            time.sleep(0.1)
+
         self.connected = True
         self.msg_queue.put(("status", "connected"))
         self.msg_queue.put(("system", "Connected as %s" % self.username))
@@ -330,7 +337,11 @@ class MumbleChatApp:
             self._append_line("Not connected.", "error")
             return
         try:
-            self.mumble.my_channel().send_text_message(text)
+            channel = self.mumble.my_channel()
+            if channel is None:
+                self._append_line("Not in a channel yet — please wait.", "error")
+                return
+            channel.send_text_message(text)
             self.msg_history.insert(0, text)
             self.history_pos = -1
             self.input_var.set("")
