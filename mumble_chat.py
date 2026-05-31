@@ -199,7 +199,14 @@ class MumbleChatApp:
 
         except Exception as e:
             tb = traceback.format_exc()
-            self.msg_queue.put(("error", "Connection error: %s\n%s" % (e, tb)))
+            log_path = "/tmp/mumble-chat-error.log"
+            try:
+                with open(log_path, "w") as f:
+                    f.write(tb)
+            except Exception:
+                pass
+            self.msg_queue.put(("error",
+                "Connection error: %s  (full traceback in %s)" % (e, log_path)))
             self.msg_queue.put(("status", "disconnected"))
 
     def _post_connect(self):
