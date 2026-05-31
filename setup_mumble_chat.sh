@@ -73,14 +73,29 @@ else
                 if [ ! -f /etc/yggdrasil/yggdrasil.conf ]; then
                     sudo yggdrasil -genconf \
                         | sudo tee /etc/yggdrasil/yggdrasil.conf >/dev/null
+
+                    # Pre-populate with two working public peers
+                    sudo python3 - <<'PYEOF'
+import re
+conf_path = '/etc/yggdrasil/yggdrasil.conf'
+with open(conf_path) as f:
+    conf = f.read()
+peers = [
+    'tls://london.sabretruth.org:18472',
+    'tls://yggdrasil.neilalexander.dev:64648?key=ecbbcb3298e7d3b4196103333c3e839cfe47a6ca47602b94a6d596683f6bb358',
+]
+peer_lines = '\n'.join('  ' + p for p in peers)
+conf = re.sub(r'Peers:\s*\[\s*\]', 'Peers: [\n' + peer_lines + '\n]', conf)
+with open(conf_path, 'w') as f:
+    f.write(conf)
+PYEOF
                 fi
 
                 sudo systemctl enable yggdrasil
                 sudo systemctl start yggdrasil
 
-                YGG_ADDR=$(yggdrasilctl getself 2>/dev/null \
-                    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('address',''))" \
-                    2>/dev/null || true)
+                YGG_ADDR=$(sudo yggdrasilctl getself 2>/dev/null \
+                    | awk '/address/ {print $2}' || true)
 
                 echo ""
                 echo "  ✓ Yggdrasil installed and running."
@@ -88,17 +103,10 @@ else
                     echo "    Your address: $YGG_ADDR"
                 fi
                 echo ""
-                echo "  ⚠  Next step: add public peers so Yggdrasil can reach"
-                echo "     other nodes. Edit the config and add peer addresses:"
-                echo ""
-                echo "      sudo nano /etc/yggdrasil/yggdrasil.conf"
-                echo ""
-                echo "     Find peers at:"
-                echo "       https://publicpeers.neilalexander.dev"
-                echo "       https://github.com/yggdrasil-network/public-peers"
-                echo ""
-                echo "     Then restart Yggdrasil:"
-                echo "       sudo systemctl restart yggdrasil"
+                echo "  Two public peers have been added to the Yggdrasil config"
+                echo "  so it can connect to the network immediately."
+                echo "  To change peers later, edit:"
+                echo "    /etc/yggdrasil/yggdrasil.conf"
                 echo ""
             fi
             ;;
