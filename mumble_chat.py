@@ -210,12 +210,12 @@ class MumbleChatApp:
             self.msg_queue.put(("status", "disconnected"))
 
     def _post_connect(self):
-        # Wait for server channel sync before marking as ready (up to 3s).
-        # my_channel() raises AttributeError (not returns None) on some pymumble
-        # builds when myself.channel_id hasn't arrived yet — catch both cases.
-        for _ in range(30):
+        # Wait for users.myself to be populated (up to 10s).
+        # ServerSync fires before our own UserState on some server versions,
+        # leaving myself=None until the UserState packet arrives separately.
+        for _ in range(100):
             try:
-                if self.mumble.my_channel() is not None:
+                if self.mumble.users.myself is not None:
                     break
             except Exception:
                 pass
@@ -351,6 +351,9 @@ class MumbleChatApp:
             self._append_line("Not connected.", "error")
             return
         try:
+            if self.mumble.users.myself is None:
+                self._append_line("Session not ready yet — please wait.", "error")
+                return
             channel = self.mumble.my_channel()
             if channel is None:
                 self._append_line("Not in a channel yet — please wait.", "error")
