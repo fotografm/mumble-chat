@@ -125,6 +125,11 @@ if ! python3 -c "import tkinter" 2>/dev/null; then
     sudo apt-get install -y python3-tk
 fi
 
+if ! python3 -c "import ensurepip" 2>/dev/null; then
+    echo "  Installing python3-venv (required for virtual environments) …"
+    sudo apt-get install -y python3-venv
+fi
+
 # ── Virtual environment ───────────────────────────────────────────────────────
 
 if [ -d "$VENV" ]; then
