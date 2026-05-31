@@ -23,16 +23,8 @@ if command -v systemctl &>/dev/null && systemctl list-unit-files yggdrasil.servi
         for i in $(seq 1 30); do
             printf "  Waiting for peer… (%ds)\r" "$i"
             PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
-                | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    peers = d.get('peers', [])
-    print(len([p for p in peers if p.get('uptime', 0) > 0]))
-except Exception:
-    print(0)
-" 2>/dev/null || echo 0)
-            if [ "$PEER_COUNT" -gt 0 ] 2>/dev/null; then
+                | awk '$2 == "Up" {count++} END {print count+0}')
+            if [ "${PEER_COUNT:-0}" -gt 0 ]; then
                 CONNECTED=1
                 break
             fi
