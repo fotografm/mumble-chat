@@ -428,7 +428,7 @@ class ConnectDialog:
         self.top.bind("<Return>", lambda e: self._ok())
 
     def _ok(self):
-        host    = self.host_var.get().strip()
+        host    = _sanitise_host(self.host_var.get())
         port    = int(self.port_var.get().strip() or "64738")
         user    = self.user_var.get().strip()
         passwd  = self.pass_var.get()
@@ -439,6 +439,19 @@ class ConnectDialog:
             return
         self.result = (host, port, user, passwd, channel)
         self.top.destroy()
+
+
+def _sanitise_host(host):
+    """Strip an accidentally appended port from a host string.
+
+    IPv6 hex groups contain a-f so they never match isdigit(). A trailing
+    segment of pure digits (e.g. ':64738') is a misplaced port number.
+    """
+    host = host.strip()
+    parts = host.rsplit(":", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        host = parts[0]
+    return host
 
 
 # ── Entry point ──────────────────────────────────────────────────────────────
@@ -456,7 +469,7 @@ def main():
     root.withdraw()          # hide blank window while the login dialog is open
     root.configure(bg=BG)
 
-    host     = args.host
+    host     = _sanitise_host(args.host) if args.host else None
     username = args.user
     port     = args.port
     password = args.password
