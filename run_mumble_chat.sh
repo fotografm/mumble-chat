@@ -14,13 +14,14 @@ STARTED_YGGDRASIL=0
 
 if command -v systemctl &>/dev/null && systemctl list-unit-files yggdrasil.service &>/dev/null; then
     if ! systemctl is-active --quiet yggdrasil; then
-        echo "Starting Yggdrasil…"
+        echo "Starting Yggdrasil and waiting for connection…"
         sudo systemctl start yggdrasil
         STARTED_YGGDRASIL=1
 
         # Wait for at least one peer to appear (timeout 30s)
         CONNECTED=0
         for i in $(seq 1 30); do
+            printf "  Waiting for peer… (%ds)\r" "$i"
             PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
                 | python3 -c "
 import sys, json
@@ -38,10 +39,11 @@ except Exception:
             sleep 1
         done
 
+        printf "\r\033[K"   # clear the progress line
         if [ "$CONNECTED" -eq 1 ]; then
             echo "Yggdrasil connected."
         else
-            echo "Yggdrasil started but no peers connected yet — continuing anyway."
+            echo "Yggdrasil started — no peers yet, continuing anyway."
         fi
     fi
 fi

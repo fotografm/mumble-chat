@@ -130,9 +130,13 @@ fi
 
 # ── Virtual environment ───────────────────────────────────────────────────────
 
-if [ -d "$VENV" ]; then
+if [ -f "$VENV/bin/python" ]; then
     echo "  ✓ Virtual environment already exists — skipping creation."
 else
+    if [ -d "$VENV" ]; then
+        echo "  Removing incomplete virtual environment …"
+        rm -rf "$VENV"
+    fi
     echo "  Creating Python virtual environment …"
     python3 -m venv "$VENV"
 fi
