@@ -119,21 +119,43 @@ PYEOF
 fi
 
 # ── Python ────────────────────────────────────────────────────────────────────
+# pymumble v2 requires Python 3.12+
 
-if ! command -v python3 &>/dev/null; then
-    echo "ERROR: Python 3 is not installed."
-    echo "       Install it with:  sudo apt install python3"
-    exit 1
-fi
+PYTHON=""
+for candidate in python3.12 python3.13 python3.14 python3; do
+    if command -v "$candidate" &>/dev/null; then
+        PY_OK=$("$candidate" -c "import sys; print('ok' if sys.version_info >= (3,12) else '')" 2>/dev/null || true)
+        if [ "$PY_OK" = "ok" ]; then
+            PYTHON="$candidate"
+            break
+        fi
+    fi
+done
 
-if ! python3 -c "import tkinter" 2>/dev/null; then
-    echo "  Installing python3-tk (required for the GUI) …"
-    sudo apt-get install -y python3-tk
-fi
-
-if ! python3 -c "import ensurepip" 2>/dev/null; then
-    echo "  Installing python3-venv (required for virtual environments) …"
-    sudo apt-get install -y python3-venv
+if [ -z "$PYTHON" ]; then
+    if command -v apt-get &>/dev/null; then
+        echo "  pymumble v2 requires Python 3.12 or newer."
+        echo "  Installing Python 3.12 via the deadsnakes PPA …"
+        sudo apt-get install -y software-properties-common
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt-get update -q
+        sudo apt-get install -y python3.12 python3.12-venv python3.12-tk
+        PYTHON="python3.12"
+    else
+        echo "ERROR: Python 3.12 or newer is required but not found."
+        echo "       Please install Python 3.12 and re-run this script."
+        exit 1
+    fi
+else
+    PY_VER=$("$PYTHON" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    if ! "$PYTHON" -c "import tkinter" 2>/dev/null && command -v apt-get &>/dev/null; then
+        echo "  Installing python${PY_VER}-tk …"
+        sudo apt-get install -y "python${PY_VER}-tk"
+    fi
+    if ! "$PYTHON" -c "import ensurepip" 2>/dev/null && command -v apt-get &>/dev/null; then
+        echo "  Installing python${PY_VER}-venv …"
+        sudo apt-get install -y "python${PY_VER}-venv"
+    fi
 fi
 
 # ── Virtual environment ───────────────────────────────────────────────────────
@@ -146,7 +168,7 @@ else
         rm -rf "$VENV"
     fi
     echo "  Creating Python virtual environment …"
-    python3 -m venv "$VENV"
+    "$PYTHON" -m venv "$VENV"
 fi
 
 # ── pymumble ──────────────────────────────────────────────────────────────────

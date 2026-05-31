@@ -18,7 +18,7 @@ It is designed to work over **Yggdrasil**, an encrypted peer-to-peer IPv6 networ
 ## Requirements
 
 - Linux (Debian / Ubuntu / Mint recommended)
-- Python 3.10 or newer
+- Python 3.12 or newer (installed automatically on Debian/Ubuntu if needed)
 - Yggdrasil (strongly recommended — see below)
 - Internet access for the initial install
 
