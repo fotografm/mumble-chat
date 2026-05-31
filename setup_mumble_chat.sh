@@ -21,8 +21,6 @@ if command -v yggdrasil &>/dev/null; then
     echo "  ✓ Yggdrasil is already installed."
     if [ -n "$YGG_ADDR" ]; then
         echo "    Your address: $YGG_ADDR"
-    else
-        echo "    (Yggdrasil service does not appear to be running)"
     fi
     echo ""
 else

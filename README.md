@@ -91,7 +91,7 @@ sudo systemctl restart yggdrasil
 Confirm you are connected:
 
 ```bash
-yggdrasilctl getPeers
+sudo yggdrasilctl getPeers
 ```
 
 You should see at least one peer listed with a non-zero `uptime`.

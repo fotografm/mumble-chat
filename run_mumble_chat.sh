@@ -8,4 +8,52 @@ if [ ! -f "$VENV/bin/python" ]; then
     exit 1
 fi
 
+# ── Yggdrasil lifecycle ───────────────────────────────────────────────────────
+
+STARTED_YGGDRASIL=0
+
+if command -v systemctl &>/dev/null && systemctl list-unit-files yggdrasil.service &>/dev/null; then
+    if ! systemctl is-active --quiet yggdrasil; then
+        echo "Starting Yggdrasil…"
+        sudo systemctl start yggdrasil
+        STARTED_YGGDRASIL=1
+
+        # Wait for at least one peer to appear (timeout 30s)
+        CONNECTED=0
+        for i in $(seq 1 30); do
+            PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
+                | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    peers = d.get('peers', [])
+    print(len([p for p in peers if p.get('uptime', 0) > 0]))
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+            if [ "$PEER_COUNT" -gt 0 ] 2>/dev/null; then
+                CONNECTED=1
+                break
+            fi
+            sleep 1
+        done
+
+        if [ "$CONNECTED" -eq 1 ]; then
+            echo "Yggdrasil connected."
+        else
+            echo "Yggdrasil started but no peers connected yet — continuing anyway."
+        fi
+    fi
+fi
+
+cleanup() {
+    if [ "$STARTED_YGGDRASIL" -eq 1 ]; then
+        echo "Stopping Yggdrasil…"
+        sudo systemctl stop yggdrasil
+    fi
+}
+trap cleanup EXIT
+
+# ── Launch ────────────────────────────────────────────────────────────────────
+
 "$VENV/bin/python" "$SCRIPT_DIR/mumble_chat.py" "$@"
