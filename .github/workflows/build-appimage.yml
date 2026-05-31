@@ -1,0 +1,135 @@
+name: Build AppImage
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python 3.12
+        run: |
+          sudo add-apt-repository -y ppa:deadsnakes/ppa
+          sudo apt-get update -q
+          sudo apt-get install -y python3.12 python3.12-venv python3.12-dev python3.12-tk
+
+      - name: Install PyInstaller and pymumble
+        run: |
+          python3.12 -m venv buildenv
+          buildenv/bin/pip install --upgrade pip
+          buildenv/bin/pip install \
+            pyinstaller \
+            "git+https://codeberg.org/pymumble/pymumble.git"
+
+      - name: Build binary with PyInstaller
+        run: |
+          buildenv/bin/pyinstaller \
+            --onefile \
+            --collect-all tkinter \
+            --name mumble-chat \
+            mumble_chat.py
+
+      - name: Assemble AppDir
+        run: |
+          mkdir -p AppDir
+
+          # ── Binary ────────────────────────────────────────────────────────
+          cp dist/mumble-chat AppDir/mumble-chat
+
+          # ── Icon (generated — replace with a real PNG any time) ───────────
+          python3.12 - << 'PYEOF'
+          import struct, zlib
+          w = h = 256
+          r, g, b = 96, 96, 255          # #6060ff
+          row = bytes([0] + [c for _ in range(w) for c in (r, g, b)])
+          raw = row * h
+          def chunk(t, d):
+              c = t + d
+              return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+          png = (b'\x89PNG\r\n\x1a\n'
+                 + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+                 + chunk(b'IDAT', zlib.compress(raw))
+                 + chunk(b'IEND', b''))
+          open('AppDir/mumble-chat.png', 'wb').write(png)
+          PYEOF
+
+          # ── Desktop entry ─────────────────────────────────────────────────
+          cat > AppDir/mumble-chat.desktop << 'DESKTOP'
+          [Desktop Entry]
+          Name=Mumble Chat
+          Exec=mumble-chat
+          Icon=mumble-chat
+          Type=Application
+          Categories=Network;Chat;
+          DESKTOP
+
+          # ── AppRun — start/stop Yggdrasil then launch binary ──────────────
+          cat > AppDir/AppRun << 'APPRUN'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+
+          STARTED_YGGDRASIL=0
+          if command -v systemctl &>/dev/null && \
+             systemctl list-unit-files yggdrasil.service &>/dev/null 2>&1; then
+              if ! systemctl is-active --quiet yggdrasil; then
+                  echo "Starting Yggdrasil and waiting for connection…"
+                  sudo systemctl start yggdrasil
+                  STARTED_YGGDRASIL=1
+                  CONNECTED=0
+                  for i in $(seq 1 30); do
+                      printf "  Waiting for peer… (%ds)\r" "$i"
+                      PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
+                          | awk '$2 == "Up" {count++} END {print count+0}')
+                      if [ "${PEER_COUNT:-0}" -gt 0 ]; then
+                          CONNECTED=1
+                          break
+                      fi
+                      sleep 1
+                  done
+                  printf "\r\033[K"
+                  if [ "$CONNECTED" -eq 1 ]; then
+                      echo "Yggdrasil connected."
+                  else
+                      echo "Yggdrasil started — no peers yet, continuing anyway."
+                  fi
+              fi
+          fi
+
+          cleanup() {
+              if [ "$STARTED_YGGDRASIL" -eq 1 ]; then
+                  echo "Stopping Yggdrasil…"
+                  sudo systemctl stop yggdrasil
+              fi
+          }
+          trap cleanup EXIT
+
+          exec "$HERE/mumble-chat" "$@"
+          APPRUN
+          chmod +x AppDir/AppRun
+
+      - name: Download appimagetool
+        run: |
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: Build AppImage
+        run: |
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage \
+            --appimage-extract-and-run \
+            AppDir \
+            mumble-chat-${{ github.ref_name }}-linux.AppImage
+
+      - name: Create GitHub Release and upload AppImage
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mumble-chat-${{ github.ref_name }}-linux.AppImage
+          generate_release_notes: true
