@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import scrolledtext, messagebox
 import threading
 import time
+import traceback
 import re
 import sys
 import argparse
@@ -197,7 +198,8 @@ class MumbleChatApp:
             m.join()
 
         except Exception as e:
-            self.msg_queue.put(("error", "Connection error: %s" % e))
+            tb = traceback.format_exc()
+            self.msg_queue.put(("error", "Connection error: %s\n%s" % (e, tb)))
             self.msg_queue.put(("status", "disconnected"))
 
     def _post_connect(self):
