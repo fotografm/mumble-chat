@@ -25,6 +25,8 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
+VERSION = "1.0.5"
+
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
 PANEL     = "#0f0f22"
@@ -63,7 +65,7 @@ class MumbleChatApp:
         # Event that fires once the connected callback has run
         self._ready    = threading.Event()
 
-        root.title("Mumble Chat")
+        root.title("Mumble Chat  v%s" % VERSION)
         root.configure(bg=BG)
         root.geometry("1200x800")
         root.minsize(800, 600)
@@ -80,7 +82,7 @@ class MumbleChatApp:
         # ── Title bar
         title_frame = tk.Frame(root, bg=PANEL, pady=8)
         title_frame.pack(fill="x")
-        tk.Label(title_frame, text="◈ MUMBLE CHAT", font=FONT_HEAD,
+        tk.Label(title_frame, text="◈ MUMBLE CHAT  v%s" % VERSION, font=FONT_HEAD,
                  bg=PANEL, fg=HEADING).pack(side="left", padx=14)
         self.status_label = tk.Label(title_frame, text="● CONNECTING",
                                      font=FONT_UI, bg=PANEL, fg=ALERT)
