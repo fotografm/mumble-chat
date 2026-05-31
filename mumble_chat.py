@@ -201,10 +201,15 @@ class MumbleChatApp:
             self.msg_queue.put(("status", "disconnected"))
 
     def _post_connect(self):
-        # Wait for server channel sync before marking as ready (up to 3s)
+        # Wait for server channel sync before marking as ready (up to 3s).
+        # my_channel() raises AttributeError (not returns None) on some pymumble
+        # builds when myself.channel_id hasn't arrived yet — catch both cases.
         for _ in range(30):
-            if self.mumble.my_channel() is not None:
-                break
+            try:
+                if self.mumble.my_channel() is not None:
+                    break
+            except Exception:
+                pass
             time.sleep(0.1)
 
         self.connected = True
