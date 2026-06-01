@@ -116,38 +116,41 @@ jobs:
                       sudo apt-get update -q
                       sudo apt-get install -y yggdrasil
 
-                      # Generate config and seed public peers if not already present
-                      if [ ! -f /etc/yggdrasil/yggdrasil.conf ]; then
-                          sudo yggdrasil -genconf \
-                              | sudo tee /etc/yggdrasil/yggdrasil.conf >/dev/null
+                      # A previous installation may have left the service masked.
+                      sudo systemctl unmask yggdrasil 2>/dev/null || true
 
-                          sudo python3 - <<'PYEOF'
-          import re
-          conf_path = '/etc/yggdrasil/yggdrasil.conf'
-          with open(conf_path) as f:
-              conf = f.read()
-          peers = [
-              'tls://london.sabretruth.org:18472',
-              'tls://yggdrasil.neilalexander.dev:64648?key=ecbbcb3298e7d3b4196103333c3e839cfe47a6ca47602b94a6d596683f6bb358',
-          ]
-          peer_lines = '\n'.join('  ' + p for p in peers)
-          conf = re.sub(r'Peers:\s*\[\s*\]', 'Peers: [\n' + peer_lines + '\n]', conf)
-          with open(conf_path, 'w') as f:
-              f.write(conf)
-          PYEOF
+                      # Generate config if the postinst didn't create one.
+                      if ! sudo test -f /etc/yggdrasil/yggdrasil.conf; then
+                          sudo yggdrasil -genconf \
+                              | sudo tee /etc/yggdrasil/yggdrasil.conf > /dev/null
+                      fi
+
+                      # Seed two public peers if the Peers list is still empty.
+                      PEERS_ADDED=0
+                      if sudo grep -qE 'Peers:\s*\[\s*\]' /etc/yggdrasil/yggdrasil.conf; then
+                          PEER1='tls://london.sabretruth.org:18472'
+                          PEER2='tls://yggdrasil.neilalexander.dev:64648?key=ecbbcb3298e7d3b4196103333c3e839cfe47a6ca47602b94a6d596683f6bb358'
+                          sudo sed -i "s|Peers: \[\]|Peers: [\n  ${PEER1}\n  ${PEER2}\n]|" \
+                              /etc/yggdrasil/yggdrasil.conf
+                          PEERS_ADDED=1
                       fi
 
                       sudo systemctl enable yggdrasil
                       sudo systemctl start yggdrasil
 
                       YGG_ADDR=$(sudo yggdrasilctl getself 2>/dev/null \
-                          | awk '/address/ {print $2}' || true)
+                          | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('address',''))" \
+                          2>/dev/null || true)
 
                       echo ""
-                      echo "  ✓ Yggdrasil installed and running."
+                      if sudo systemctl is-active --quiet yggdrasil; then
+                          echo "  ✓ Yggdrasil installed and running."
+                      else
+                          echo "  ⚠ Yggdrasil installed but service did not start."
+                          echo "    Run: sudo systemctl unmask yggdrasil && sudo systemctl start yggdrasil"
+                      fi
                       [ -n "$YGG_ADDR" ] && echo "    Your address: $YGG_ADDR"
-                      echo ""
-                      echo "  Two public peers added to /etc/yggdrasil/yggdrasil.conf"
+                      [ "$PEERS_ADDED" -eq 1 ] && echo "  Two public peers added to /etc/yggdrasil/yggdrasil.conf"
                       echo ""
                       ;;
                   *)
