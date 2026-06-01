@@ -25,7 +25,7 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
-VERSION = "1.0.11"
+VERSION = "1.0.12"
 
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
@@ -499,11 +499,21 @@ class ConnectDialog:
 
 
 def _sanitise_host(host):
-    """Strip an accidentally appended port from a host string.
+    """Strip invisible Unicode characters and an accidentally appended port.
+
+    Apps like Google Keep append invisible characters (zero-width space,
+    BOM, directional marks, etc.) when copying text. Strip them before
+    any other processing.
 
     IPv6 hex groups contain a-f so they never match isdigit(). A trailing
     segment of pure digits (e.g. ':64738') is a misplaced port number.
     """
+    # Remove every Unicode character whose category is Cc (control),
+    # Cf (format, includes zero-width spaces / BOM / directional marks), or
+    # Zs (space separator other than plain ASCII space).
+    import unicodedata
+    host = "".join(c for c in host
+                   if unicodedata.category(c) not in ("Cc", "Cf", "Zs"))
     host = host.strip()
     parts = host.rsplit(":", 1)
     if len(parts) == 2 and parts[1].isdigit():
