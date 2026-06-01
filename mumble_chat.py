@@ -25,7 +25,7 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
-VERSION = "1.0.10"
+VERSION = "1.0.11"
 
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
@@ -59,12 +59,13 @@ class MumbleChatApp:
         self.username  = username
         self.password  = password
         self.channel   = channel
-        self.mumble           = None
-        self.connected        = False
-        self.msg_queue        = queue.Queue()
-        self._current_channel = None   # cached after join; fallback when myself is None
+        self.mumble             = None
+        self.connected          = False
+        self._post_connect_done = False   # True after first _post_connect(); gates reconnect path
+        self.msg_queue          = queue.Queue()
+        self._current_channel   = None    # cached after join; fallback when myself is None
         # Event that fires once the connected callback (ServerSync) has run
-        self._ready           = threading.Event()
+        self._ready             = threading.Event()
 
         root.title("Mumble Chat  v%s" % VERSION)
         root.configure(bg=BG)
@@ -261,9 +262,24 @@ class MumbleChatApp:
                     pass
 
         self.msg_queue.put(("refresh_users",))
+        self._post_connect_done = True
 
     def _on_connected_cb(self):
         self._ready.set()
+        if not self._post_connect_done:
+            return
+        # Reconnect path: _post_connect() won't run again, so restore state here.
+        self.connected = True
+        self.msg_queue.put(("status", "connected"))
+        self.msg_queue.put(("system", "Reconnected."))
+        if self.channel:
+            try:
+                ch = self.mumble.channels.find_by_name(self.channel)
+                ch.move_in()
+                self._current_channel = ch
+            except Exception:
+                pass
+        self.msg_queue.put(("refresh_users",))
 
     def _on_disconnected_cb(self):
         self.connected = False
