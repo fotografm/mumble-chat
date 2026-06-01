@@ -25,7 +25,7 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
-VERSION = "1.0.12"
+VERSION = "1.0.13"
 
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
@@ -470,6 +470,15 @@ class ConnectDialog:
                  font=FONT_HEAD, bg=BG, fg=HEADING, pady=14).pack()
 
         self.host_var = row("Server address  (IPv6 e.g. 200:xxxx:... or hostname)")
+
+        # Strip invisible Unicode characters the moment they are pasted in.
+        def _clean_host(*_):
+            raw = self.host_var.get()
+            clean = _strip_invisible(raw)
+            if clean != raw:
+                self.top.after_idle(lambda: self.host_var.set(clean))
+        self.host_var.trace_add("write", _clean_host)
+
         self.port_var = row("Port", "64738")
         self.user_var = row("Your name / callsign")
         self.pass_var = row("Server password  (leave blank if none)", show="*")
@@ -498,23 +507,26 @@ class ConnectDialog:
         self.top.destroy()
 
 
-def _sanitise_host(host):
-    """Strip invisible Unicode characters and an accidentally appended port.
+def _strip_invisible(text):
+    """Remove Unicode control/format/non-ASCII-space characters.
 
-    Apps like Google Keep append invisible characters (zero-width space,
-    BOM, directional marks, etc.) when copying text. Strip them before
-    any other processing.
+    Apps like Google Keep append invisible characters (zero-width space
+    U+200B, BOM U+FEFF, directional marks U+200E/F, etc.) when copying
+    text. Strip every character whose Unicode category is Cc (control),
+    Cf (format), or Zs (space separator other than plain ASCII space).
+    """
+    import unicodedata
+    return "".join(c for c in text
+                   if unicodedata.category(c) not in ("Cc", "Cf", "Zs"))
+
+
+def _sanitise_host(host):
+    """Strip invisible Unicode then an accidentally appended port number.
 
     IPv6 hex groups contain a-f so they never match isdigit(). A trailing
     segment of pure digits (e.g. ':64738') is a misplaced port number.
     """
-    # Remove every Unicode character whose category is Cc (control),
-    # Cf (format, includes zero-width spaces / BOM / directional marks), or
-    # Zs (space separator other than plain ASCII space).
-    import unicodedata
-    host = "".join(c for c in host
-                   if unicodedata.category(c) not in ("Cc", "Cf", "Zs"))
-    host = host.strip()
+    host = _strip_invisible(host).strip()
     parts = host.rsplit(":", 1)
     if len(parts) == 2 and parts[1].isdigit():
         host = parts[0]
