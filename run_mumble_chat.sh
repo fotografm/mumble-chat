@@ -12,31 +12,25 @@ fi
 
 STARTED_YGGDRASIL=0
 
-if command -v systemctl &>/dev/null && systemctl list-unit-files yggdrasil.service &>/dev/null; then
+if command -v systemctl &>/dev/null && \
+   systemctl list-unit-files yggdrasil.service &>/dev/null 2>&1; then
     if ! systemctl is-active --quiet yggdrasil; then
-        echo "Starting Yggdrasil and waiting for connection…"
+        echo "Starting Yggdrasil…"
         sudo systemctl start yggdrasil
         STARTED_YGGDRASIL=1
 
-        # Wait for at least one peer to appear (timeout 30s)
-        CONNECTED=0
-        for i in $(seq 1 30); do
-            printf "  Waiting for peer… (%ds)\r" "$i"
-            PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
-                | awk '$2 == "Up" {count++} END {print count+0}')
-            if [ "${PEER_COUNT:-0}" -gt 0 ]; then
-                CONNECTED=1
+        # Wait for the network interface to come up (ygg0 on 0.5+, tun0 on 0.4.x)
+        printf "Waiting for Yggdrasil interface"
+        for i in $(seq 1 20); do
+            if ip link show ygg0 &>/dev/null 2>&1 || \
+               ip link show tun0 &>/dev/null 2>&1; then
+                echo " — ready."
                 break
             fi
+            printf "."
             sleep 1
         done
-
-        printf "\r\033[K"   # clear the progress line
-        if [ "$CONNECTED" -eq 1 ]; then
-            echo "Yggdrasil connected."
-        else
-            echo "Yggdrasil started — no peers yet, continuing anyway."
-        fi
+        [[ $i -eq 20 ]] && echo " — timeout, continuing anyway."
     fi
 fi
 
