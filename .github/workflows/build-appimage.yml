@@ -1,4 +1,4 @@
-name: Build AppImage
+name: Build Release
 
 on:
   push:
@@ -15,6 +15,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y makeself
 
       - name: Install Python 3.12
         run: |
@@ -38,98 +43,180 @@ jobs:
             --name mumble-chat \
             mumble_chat.py
 
-      - name: Assemble AppDir
+      - name: Assemble package directory
         run: |
-          mkdir -p AppDir
+          mkdir -p MumbleChatPkg
 
-          # ── Binary ────────────────────────────────────────────────────────
-          cp dist/mumble-chat AppDir/mumble-chat
+          cp dist/mumble-chat MumbleChatPkg/
 
-          # ── Icon (generated — replace with a real PNG any time) ───────────
-          python3.12 - << 'PYEOF'
-          import struct, zlib
-          w = h = 256
-          r, g, b = 96, 96, 255          # #6060ff
-          row = bytes([0] + [c for _ in range(w) for c in (r, g, b)])
-          raw = row * h
-          def chunk(t, d):
-              c = t + d
-              return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-          png = (b'\x89PNG\r\n\x1a\n'
-                 + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
-                 + chunk(b'IDAT', zlib.compress(raw))
-                 + chunk(b'IEND', b''))
-          open('AppDir/mumble-chat.png', 'wb').write(png)
-          PYEOF
-
-          # ── Desktop entry ─────────────────────────────────────────────────
-          cat > AppDir/mumble-chat.desktop << 'DESKTOP'
-          [Desktop Entry]
-          Name=Mumble Chat
-          Exec=mumble-chat
-          Icon=mumble-chat
-          Type=Application
-          Categories=Network;Chat;
-          DESKTOP
-
-          # ── AppRun — start/stop Yggdrasil then launch binary ──────────────
-          cat > AppDir/AppRun << 'APPRUN'
+          # ── Launcher script — runs inside the extracted package ────────────
+          # Mirrors setup_mumble_chat.sh: installs Yggdrasil if absent,
+          # manages its lifecycle around each session.
+          cat > MumbleChatPkg/run.sh << 'RUNSCRIPT'
           #!/bin/bash
-          HERE="$(dirname "$(readlink -f "${0}")")"
+          HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          TAG="${1:-}"   # version tag passed by makeself
 
-          STARTED_YGGDRASIL=0
-          if command -v systemctl &>/dev/null && \
-             systemctl list-unit-files yggdrasil.service &>/dev/null 2>&1; then
-              if ! systemctl is-active --quiet yggdrasil; then
-                  echo "Starting Yggdrasil and waiting for connection…"
-                  sudo systemctl start yggdrasil
-                  STARTED_YGGDRASIL=1
-                  CONNECTED=0
-                  for i in $(seq 1 30); do
-                      printf "  Waiting for peer… (%ds)\r" "$i"
-                      PEER_COUNT=$(sudo yggdrasilctl getPeers 2>/dev/null \
-                          | awk '$2 == "Up" {count++} END {print count+0}')
-                      if [ "${PEER_COUNT:-0}" -gt 0 ]; then
-                          CONNECTED=1
-                          break
-                      fi
-                      sleep 1
-                  done
-                  printf "\r\033[K"
-                  if [ "$CONNECTED" -eq 1 ]; then
-                      echo "Yggdrasil connected."
-                  else
-                      echo "Yggdrasil started — no peers yet, continuing anyway."
-                  fi
+          echo ""
+          echo "┌──────────────────────────────────────────┐"
+          echo "│         Mumble Chat — Starting           │"
+          echo "└──────────────────────────────────────────┘"
+          echo ""
+
+          # ── Yggdrasil ───────────────────────────────────────────────────────
+          ensure_yggdrasil() {
+              if command -v yggdrasil &>/dev/null; then
+                  YGG_ADDR=$(yggdrasilctl getself 2>/dev/null \
+                      | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('address',''))" \
+                      2>/dev/null || true)
+                  echo "  ✓ Yggdrasil already installed."
+                  [ -n "$YGG_ADDR" ] && echo "    Your address: $YGG_ADDR"
+                  echo ""
+                  return 0
               fi
-          fi
+
+              echo "  ──────────────────────────────────────────"
+              echo "   Yggdrasil is not installed"
+              echo "  ──────────────────────────────────────────"
+              echo ""
+              echo "  Mumble Chat connects to Mumble servers over Yggdrasil —"
+              echo "  a free, encrypted, peer-to-peer IPv6 network."
+              echo "  Without it you can only reach standard Mumble servers"
+              echo "  by hostname or public IP."
+              echo ""
+              read -r -p "  Install Yggdrasil now? [y/N] " yn
+              echo ""
+
+              case "$yn" in
+                  [Yy]*)
+                      if ! command -v apt-get &>/dev/null; then
+                          echo "  Auto-install only works on Debian / Ubuntu / Mint."
+                          echo "  Please install Yggdrasil manually, then re-run:"
+                          echo "    https://yggdrasil-network.github.io/installation.html"
+                          echo ""
+                          read -r -p "  Continue without Yggdrasil? [y/N] " cont
+                          [[ "$cont" =~ ^[Yy] ]] || { echo "Exiting."; exit 0; }
+                          return 0
+                      fi
+
+                      echo "  Installing Yggdrasil via the official apt repository…"
+
+                      if ! command -v curl &>/dev/null; then
+                          sudo apt-get install -y curl
+                      fi
+
+                      curl -sL https://deb.yggdrasil.io/key.gpg \
+                          | sudo tee /usr/share/keyrings/yggdrasil-keyring.gpg >/dev/null
+                      echo 'deb [signed-by=/usr/share/keyrings/yggdrasil-keyring.gpg] https://deb.yggdrasil.io/ debian main' \
+                          | sudo tee /etc/apt/sources.list.d/yggdrasil.list >/dev/null
+
+                      sudo apt-get update -q
+                      sudo apt-get install -y yggdrasil
+
+                      # Generate config and seed public peers if not already present
+                      if [ ! -f /etc/yggdrasil/yggdrasil.conf ]; then
+                          sudo yggdrasil -genconf \
+                              | sudo tee /etc/yggdrasil/yggdrasil.conf >/dev/null
+
+                          sudo python3 - <<'PYEOF'
+          import re
+          conf_path = '/etc/yggdrasil/yggdrasil.conf'
+          with open(conf_path) as f:
+              conf = f.read()
+          peers = [
+              'tls://london.sabretruth.org:18472',
+              'tls://yggdrasil.neilalexander.dev:64648?key=ecbbcb3298e7d3b4196103333c3e839cfe47a6ca47602b94a6d596683f6bb358',
+          ]
+          peer_lines = '\n'.join('  ' + p for p in peers)
+          conf = re.sub(r'Peers:\s*\[\s*\]', 'Peers: [\n' + peer_lines + '\n]', conf)
+          with open(conf_path, 'w') as f:
+              f.write(conf)
+          PYEOF
+                      fi
+
+                      sudo systemctl enable yggdrasil
+                      sudo systemctl start yggdrasil
+
+                      YGG_ADDR=$(sudo yggdrasilctl getself 2>/dev/null \
+                          | awk '/address/ {print $2}' || true)
+
+                      echo ""
+                      echo "  ✓ Yggdrasil installed and running."
+                      [ -n "$YGG_ADDR" ] && echo "    Your address: $YGG_ADDR"
+                      echo ""
+                      echo "  Two public peers added to /etc/yggdrasil/yggdrasil.conf"
+                      echo ""
+                      ;;
+                  *)
+                      echo "  Skipping Yggdrasil — connecting by hostname/IP only."
+                      echo ""
+                      ;;
+              esac
+          }
+
+          # ── Yggdrasil service lifecycle ─────────────────────────────────────
+          STARTED_YGGDRASIL=0
+
+          start_yggdrasil() {
+              command -v systemctl &>/dev/null || return
+              systemctl list-unit-files yggdrasil.service &>/dev/null 2>&1 || return
+              systemctl is-active --quiet yggdrasil && return
+
+              echo "  Starting Yggdrasil…"
+              sudo systemctl start yggdrasil
+              STARTED_YGGDRASIL=1
+
+              printf "  Waiting for interface"
+              for i in $(seq 1 20); do
+                  if ip link show ygg0 &>/dev/null 2>&1 || \
+                     ip link show tun0 &>/dev/null 2>&1; then
+                      echo " — ready."
+                      return
+                  fi
+                  printf "."
+                  sleep 1
+              done
+              echo " — timeout, continuing anyway."
+          }
 
           cleanup() {
-              if [ "$STARTED_YGGDRASIL" -eq 1 ]; then
-                  echo "Stopping Yggdrasil…"
+              [ "$STARTED_YGGDRASIL" -eq 1 ] && {
+                  echo ""
+                  echo "  Stopping Yggdrasil…"
                   sudo systemctl stop yggdrasil
-              fi
+              }
           }
           trap cleanup EXIT
 
+          ensure_yggdrasil
+          start_yggdrasil
+
           exec "$HERE/mumble-chat" "$@"
-          APPRUN
-          chmod +x AppDir/AppRun
+          RUNSCRIPT
+          chmod +x MumbleChatPkg/run.sh
 
-      - name: Download appimagetool
+      - name: Build self-extracting archive
         run: |
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
+          makeself \
+            MumbleChatPkg/ \
+            "mumble-chat-${{ github.ref_name }}-linux.run" \
+            "Mumble Chat ${{ github.ref_name }}" \
+            ./run.sh
 
-      - name: Build AppImage
-        run: |
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage \
-            --appimage-extract-and-run \
-            AppDir \
-            mumble-chat-${{ github.ref_name }}-linux.AppImage
-
-      - name: Create GitHub Release and upload AppImage
+      - name: Create GitHub Release and upload
         uses: softprops/action-gh-release@v2
         with:
-          files: mumble-chat-${{ github.ref_name }}-linux.AppImage
+          files: mumble-chat-${{ github.ref_name }}-linux.run
           generate_release_notes: true
+          body: |
+            ## Installation
+
+            Download `mumble-chat-${{ github.ref_name }}-linux.run`, then:
+
+            ```bash
+            chmod +x mumble-chat-${{ github.ref_name }}-linux.run
+            ./mumble-chat-${{ github.ref_name }}-linux.run
+            ```
+
+            No FUSE, no manual dependency installs required.
+            If Yggdrasil is not installed the app will offer to install it for you.

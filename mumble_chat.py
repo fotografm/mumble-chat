@@ -25,7 +25,7 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
-VERSION = "1.0.5"
+VERSION = "1.0.7"
 
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
@@ -59,11 +59,12 @@ class MumbleChatApp:
         self.username  = username
         self.password  = password
         self.channel   = channel
-        self.mumble    = None
-        self.connected = False
-        self.msg_queue = queue.Queue()
-        # Event that fires once the connected callback has run
-        self._ready    = threading.Event()
+        self.mumble           = None
+        self.connected        = False
+        self.msg_queue        = queue.Queue()
+        self._current_channel = None   # cached after join; fallback when myself is None
+        # Event that fires once the connected callback (ServerSync) has run
+        self._ready           = threading.Event()
 
         root.title("Mumble Chat  v%s" % VERSION)
         root.configure(bg=BG)
@@ -189,10 +190,19 @@ class MumbleChatApp:
             m.callbacks.connected.set_handler(self._on_connected_cb)
             m.callbacks.disconnected.set_handler(self._on_disconnected_cb)
 
-            # __enter__ starts the connection thread and blocks until connected
+            # __enter__ starts the connection thread.  With reconnect=True it
+            # returns after the FIRST attempt regardless of success, so we must
+            # wait for the ServerSync-triggered connected callback before
+            # proceeding — otherwise we call _post_connect on a dead socket.
             m.__enter__()
+            if not self._ready.wait(timeout=60):
+                self.msg_queue.put(("error",
+                    "Server did not respond in 60 s. "
+                    "Is Yggdrasil running and the address correct?"))
+                self.msg_queue.put(("status", "disconnected"))
+                return
 
-            # If we reach here, connected. Post-connect work:
+            # Genuinely connected; do post-connect work:
             self._post_connect()
 
             # Now block keeping the connection alive until disconnected
@@ -231,16 +241,24 @@ class MumbleChatApp:
             try:
                 ch = self.mumble.channels.find_by_name(self.channel)
                 ch.move_in()
+                self._current_channel = ch
                 self.msg_queue.put(("system", "Joined: %s" % self.channel))
                 self.msg_queue.put(("chan", self.channel))
             except Exception as e:
                 self.msg_queue.put(("error", "Channel error: %s" % e))
         else:
             try:
-                ch_name = self.mumble.my_channel()["name"]
-                self.msg_queue.put(("chan", ch_name))
+                ch = self.mumble.my_channel()
+                self._current_channel = ch
+                self.msg_queue.put(("chan", ch["name"]))
             except Exception:
-                pass
+                # my_channel() requires myself; fall back to root (channel 0)
+                try:
+                    ch = self.mumble.channels[0]
+                    self._current_channel = ch
+                    self.msg_queue.put(("chan", ch["name"]))
+                except Exception:
+                    pass
 
         self.msg_queue.put(("refresh_users",))
 
@@ -353,10 +371,21 @@ class MumbleChatApp:
             self._append_line("Not connected.", "error")
             return
         try:
-            if self.mumble.users.myself is None:
-                self._append_line("Session not ready yet — please wait.", "error")
-                return
-            channel = self.mumble.my_channel()
+            # Prefer my_channel() (tracks moves); fall back to cached join target,
+            # then root channel 0.  myself being None doesn't block sending.
+            channel = None
+            try:
+                if self.mumble.users.myself is not None:
+                    channel = self.mumble.my_channel()
+            except Exception:
+                pass
+            if channel is None:
+                channel = self._current_channel
+            if channel is None:
+                try:
+                    channel = self.mumble.channels[0]
+                except Exception:
+                    pass
             if channel is None:
                 self._append_line("Not in a channel yet — please wait.", "error")
                 return
