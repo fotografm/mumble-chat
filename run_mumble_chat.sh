@@ -9,17 +9,15 @@ if [ ! -f "$VENV/bin/python" ]; then
 fi
 
 # ── Yggdrasil lifecycle ───────────────────────────────────────────────────────
-
-STARTED_YGGDRASIL=0
+# Start if not running; never stop on exit — yggdrasil is a system service
+# and other sessions or apps may depend on it staying up.
 
 if command -v systemctl &>/dev/null && \
    systemctl list-unit-files yggdrasil.service &>/dev/null 2>&1; then
     if ! systemctl is-active --quiet yggdrasil; then
         echo "Starting Yggdrasil…"
         sudo systemctl start yggdrasil
-        STARTED_YGGDRASIL=1
 
-        # Wait for the network interface to come up (ygg0 on 0.5+, tun0 on 0.4.x)
         printf "Waiting for Yggdrasil interface"
         for i in $(seq 1 20); do
             if ip link show ygg0 &>/dev/null 2>&1 || \
@@ -33,14 +31,6 @@ if command -v systemctl &>/dev/null && \
         [[ $i -eq 20 ]] && echo " — timeout, continuing anyway."
     fi
 fi
-
-cleanup() {
-    if [ "$STARTED_YGGDRASIL" -eq 1 ]; then
-        echo "Stopping Yggdrasil…"
-        sudo systemctl stop yggdrasil
-    fi
-}
-trap cleanup EXIT
 
 # ── Launch ────────────────────────────────────────────────────────────────────
 

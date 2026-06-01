@@ -161,7 +161,9 @@ jobs:
           }
 
           # ── Yggdrasil service lifecycle ─────────────────────────────────────
-          STARTED_YGGDRASIL=0
+          # Yggdrasil is a system service (systemctl enable'd on install).
+          # We start it if it isn't running, but we never stop it on exit —
+          # other services or SSH sessions may depend on it staying up.
 
           start_yggdrasil() {
               command -v systemctl &>/dev/null || return
@@ -170,7 +172,6 @@ jobs:
 
               echo "  Starting Yggdrasil…"
               sudo systemctl start yggdrasil
-              STARTED_YGGDRASIL=1
 
               printf "  Waiting for interface"
               for i in $(seq 1 20); do
@@ -184,15 +185,6 @@ jobs:
               done
               echo " — timeout, continuing anyway."
           }
-
-          cleanup() {
-              [ "$STARTED_YGGDRASIL" -eq 1 ] && {
-                  echo ""
-                  echo "  Stopping Yggdrasil…"
-                  sudo systemctl stop yggdrasil
-              }
-          }
-          trap cleanup EXIT
 
           ensure_yggdrasil
           start_yggdrasil

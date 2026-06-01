@@ -25,7 +25,7 @@ except ImportError:
     print("Install with:  pip install 'git+https://codeberg.org/pymumble/pymumble.git'")
     sys.exit(1)
 
-VERSION = "1.0.13"
+VERSION = "1.0.14"
 
 # ── Colour palette ─────────────────────────────────────────────────────────
 BG        = "#0a0a18"
