@@ -55,16 +55,19 @@ else
                 echo "  Installing Yggdrasil via the official apt repository …"
                 echo ""
 
-                # Ensure curl is available
-                if ! command -v curl &>/dev/null; then
-                    sudo apt-get install -y curl
+                # Ensure gpg is available
+                if ! command -v gpg &>/dev/null; then
+                    sudo apt-get install -y gnupg
                 fi
 
                 # Add GPG key and repository
-                curl -sL https://deb.yggdrasil.io/key.gpg \
-                    | sudo tee /usr/share/keyrings/yggdrasil-keyring.gpg >/dev/null
-                echo 'deb [signed-by=/usr/share/keyrings/yggdrasil-keyring.gpg] https://deb.yggdrasil.io/ debian main' \
-                    | sudo tee /etc/apt/sources.list.d/yggdrasil.list >/dev/null
+                sudo mkdir -p /usr/local/apt-keys
+                gpg --batch --yes --fetch-keys \
+                    https://neilalexander.s3.dualstack.eu-west-2.amazonaws.com/deb/key.txt
+                gpg --batch --yes --export 1C5162E133015D81A811239D1840CDAC6011C5EA \
+                    | sudo tee /usr/local/apt-keys/yggdrasil-keyring.gpg > /dev/null
+                echo 'deb [signed-by=/usr/local/apt-keys/yggdrasil-keyring.gpg] https://neilalexander.s3.dualstack.eu-west-2.amazonaws.com/deb/ debian yggdrasil' \
+                    | sudo tee /etc/apt/sources.list.d/yggdrasil.list > /dev/null
 
                 sudo apt-get update -q
                 sudo apt-get install -y yggdrasil
